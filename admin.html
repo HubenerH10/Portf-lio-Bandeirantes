@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Portal MKT · Portfólio Bandeirantes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="mark" href="#/produtos">
+      <span class="mark-disc" aria-hidden="true">B</span>
+      <span><span class="mark-t">Portal MKT</span><br><span class="mark-s">Portfólio Bandeirantes</span></span>
+    </a>
+    <div class="top-act">
+      <span id="sync" class="mono" style="font-size:13px"></span>
+      <a class="btn btn-sm" href="index.html" target="_blank" rel="noopener">Ver landing page</a>
+      <button id="sair" class="btn btn-sm btn-ghost hidden" type="button">Sair</button>
+    </div>
+  </div>
+</header>
+<main id="app"><div class="status">Carregando…</div></main>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/core.js"></script>
+<script>
+(function(){
+"use strict";
+var POLL_MS = 20000;
+var S = { brands:{}, brandList:[], products:[], byCod:{}, config:{}, versao:"", tab:"produtos", m:{q:"",fil:"",marca:"",page:0}, busy:0 };
+var CATS = CORE.CATEGORIAS, CATN = {}; CATS.forEach(function(c){CATN[c.slug]=c.nome;});
+var SELOS = ["","Lançamento","Edição limitada","Mais vendido","Novidade"];
+var $app = document.getElementById("app"), $sync = document.getElementById("sync");
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function norm(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
+function toast(msg){var t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(function(){t.remove();},3000);}
+function countBy(arr,key){var m={};arr.forEach(function(p){var k=p[key];if(k)m[k]=(m[k]||0)+1;});return m;}
+function syncTxt(t){$sync.textContent=t||"";}
+
+/* ---------- acesso ---------- */
+async function boot(){
+  if(!API.configurado()){$app.innerHTML='<div class="status">Falta configurar a URL do Apps Script em js/config.js. O passo a passo está no LEIA-ME.</div>';return;}
+  if(!sessionStorage.getItem("portalSenha"))return telaLogin();
+  try{await API.post("ping");}catch(e){sessionStorage.removeItem("portalSenha");return telaLogin(e.code==="senha"?"Senha incorreta.":"Não foi possível conectar: "+e.message);}
+  document.getElementById("sair").classList.remove("hidden");
+  await carregar();
+  setInterval(verificar,POLL_MS);
+}
+function telaLogin(msg){
+  $app.innerHTML='<div class="panel" style="max-width:420px;margin:40px auto"><h1 style="margin-bottom:12px">Entrar</h1><div class="form">'+
+    '<label>Senha do time de marketing<input id="pw" type="password" autocomplete="current-password"></label>'+
+    (msg?'<p class="help" style="color:var(--red-dk);margin:0">'+esc(msg)+'</p>':'')+
+    '<div><button class="btn btn-red" id="entrar" type="button">Entrar</button></div></div></div>';
+  var pw=document.getElementById("pw");pw.focus();
+  function go(){sessionStorage.setItem("portalSenha",pw.value);$app.innerHTML='<div class="status">Conferindo…</div>';boot();}
+  document.getElementById("entrar").onclick=go;pw.onkeydown=function(e){if(e.key==="Enter")go();};
+}
+document.getElementById("sair").onclick=function(){sessionStorage.removeItem("portalSenha");location.reload();};
+
+/* ---------- dados ---------- */
+function aplicar(cat){
+  S.versao=cat.versao||"";S.config=cat.config||{};
+  S.brands={};(cat.marcas||[]).forEach(function(m){S.brands[m.slug]=m;});
+  S.products=cat.produtos||[];
+  reindex();
+}
+function reindex(){
+  S.brandList=Object.keys(S.brands).map(function(k){return S.brands[k];}).sort(function(a,b){return (a.ordem||999)-(b.ordem||999)||String(a.nome).localeCompare(b.nome);});
+  S.byCod={};S.products.forEach(function(p){S.byCod[p.cod]=p;});
+}
+async function carregar(){
+  syncTxt("Atualizando…");
+  aplicar(await API.catalogo());
+  syncTxt("Sincronizado "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}));
+  render();
+}
+function editando(){var a=document.activeElement;return S.busy>0||(a&&$app.contains(a)&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)&&a.type!=="file");}
+async function verificar(){
+  if(document.hidden||editando())return;
+  try{var v=await API.versao();if(v&&v!==S.versao)await carregar();}catch(e){}
+}
+async function salvar(acao,dados,el){
+  S.busy++;syncTxt("Salvando…");
+  try{var r=await API.post(acao,dados);S.versao=r.versao||S.versao;syncTxt("Salvo às "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}));if(el)marcaSalvo(el);return r;}
+  catch(e){syncTxt("");toast("Não salvou: "+e.message);if(e.code==="senha"){sessionStorage.removeItem("portalSenha");location.reload();}throw e;}
+  finally{S.busy--;}
+}
+function marcaSalvo(el){var tr=el.closest&&el.closest("tr");var c=tr&&tr.querySelector(".saved");if(c){c.textContent="Salvo";setTimeout(function(){c.textContent="";},1600);}}
+
+/* ---------- imagens ---------- */
+function lerBase64(blob){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(",")[1]);};r.onerror=rej;r.readAsDataURL(blob);});}
+// reduz a imagem para no máximo 1200px e converte para WEBP antes de enviar
+function otimizar(file){
+  if(/svg/.test(file.type)||/\.svg$/i.test(file.name))return Promise.resolve({blob:file,mime:"image/svg+xml",ext:"svg"});
+  return new Promise(function(res){
+    var img=new Image(),url=URL.createObjectURL(file);
+    img.onload=function(){
+      var max=1200,w=img.naturalWidth,h=img.naturalHeight,k=Math.min(1,max/Math.max(w,h));
+      var c=document.createElement("canvas");c.width=Math.round(w*k);c.height=Math.round(h*k);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
+      c.toBlob(function(b){if(b&&b.type==="image/webp")res({blob:b,mime:"image/webp",ext:"webp"});else c.toBlob(function(b2){res({blob:b2||file,mime:b2?"image/png":file.type,ext:b2?"png":"img"});},"image/png");},"image/webp",0.86);
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);res({blob:file,mime:file.type||"image/jpeg",ext:(file.name.split(".").pop()||"jpg")});};
+    img.src=url;
+  });
+}
+function codsMesmoEan(p){if(!p.ean)return [p.cod];return S.products.filter(function(x){return x.ean===p.ean;}).map(function(x){return x.cod;});}
+async function enviarImagem(file,alvo,chaves,nome){
+  var o=await otimizar(file),b64=await lerBase64(o.blob);
+  var dados={alvo:alvo,base64:b64,mime:o.mime,nome:nome+"."+o.ext};
+  if(alvo==="marca")dados.chave=chaves[0];else dados.chaves=chaves;
+  var r=await salvar("imagem",dados);
+  var id=r.res&&r.res.id;
+  if(id){if(alvo==="marca")S.brands[chaves[0]].logo=id;else chaves.forEach(function(c){if(S.byCod[c])S.byCod[c].imagem=id;});}
+  return id;
+}
+function pickFile(cb){var i=document.createElement("input");i.type="file";i.accept="image/png,image/jpeg,image/webp,image/svg+xml";i.onchange=function(){if(i.files[0])cb(i.files[0]);};i.click();}
+
+/* ---------- telas ---------- */
+window.addEventListener("hashchange",function(){render();window.scrollTo(0,0);});
+function render(){
+  var tab=location.hash.replace(/^#\/?/,"")||"produtos";S.tab=tab;
+  if(!S.products.length&&tab!=="cadastro")return telaVazia();
+  var tabs=[["produtos","Produtos"],["marcas","Marcas"],["imagens","Importar imagens"],["cadastro","Atualizar cadastro"],["site","Configurações"]];
+  var withImg=S.products.filter(function(p){return p.imagem;}).length,vis=S.products.filter(function(p){return p.visivel!==false;}).length;
+  var withLogo=S.brandList.filter(function(b){return b.logo;}).length,pct=S.products.length?Math.round(withImg/S.products.length*100):0;
+  var h='<div class="stats"><div class="stat"><b>'+S.products.length+'</b><span>SKUs cadastrados, '+vis+' visíveis</span></div>'+
+     '<div class="stat"><b>'+pct+'%</b><span>com imagem ('+withImg+')</span><div class="bar"><i style="width:'+pct+'%"></i></div></div>'+
+     '<div class="stat"><b>'+withLogo+'/'+S.brandList.length+'</b><span>marcas com logo</span></div></div>';
+  h+='<div class="tabs" role="tablist">'+tabs.map(function(t){return '<a class="tab'+(t[0]===tab?" on":"")+'" role="tab" href="#/'+t[0]+'">'+t[1]+'</a>';}).join("")+'</div><div id="body"></div>';
+  $app.innerHTML=h;
+  var body=document.getElementById("body");
+  ({produtos:telaProdutos,marcas:telaMarcas,imagens:telaImagens,cadastro:telaCadastro,site:telaSite}[tab]||telaProdutos)(body);
+}
+function telaVazia(){
+  $app.innerHTML='<div class="panel" style="max-width:640px;margin:30px auto"><h1>Base vazia</h1><p class="help">A planilha ainda não tem produtos. Carregue a base inicial com os 381 SKUs de venda e as 54 marcas, ou vá direto para a atualização pela planilha do sistema.</p>'+
+    '<div class="tools"><button class="btn btn-red" id="seed" type="button">Carregar base inicial</button><a class="btn" href="#/cadastro" >Subir Cadastro_Produto.xlsx</a><span id="sp" class="mono"></span></div></div>';
+  document.getElementById("seed").onclick=async function(){
+    var btn=this,sp=document.getElementById("sp");btn.disabled=true;sp.textContent="Lendo base…";
+    try{
+      await carregarScript("dados/catalogo-inicial.js");
+      var c=window.CATALOGO_INICIAL;
+      sp.textContent="Gravando marcas e configurações…";
+      await salvar("upsert",{marcas:c.marcas});
+      await salvar("config",{patch:c.config});
+      for(var i=0;i<c.produtos.length;i+=120){sp.textContent="Gravando produtos "+Math.min(i+120,c.produtos.length)+" de "+c.produtos.length+"…";await salvar("upsert",{produtos:c.produtos.slice(i,i+120)});}
+      await carregar();toast("Base carregada");
+    }catch(e){btn.disabled=false;sp.textContent="Falhou: "+e.message;}
+  };
+}
+function carregarScript(src){return new Promise(function(res,rej){var s=document.createElement("script");s.src=src+"?t="+Date.now();s.onload=res;s.onerror=function(){rej(new Error("Não carregou "+src));};document.head.appendChild(s);});}
+function brandOptions(sel){return S.brandList.map(function(b){return '<option value="'+esc(b.slug)+'"'+(b.slug===sel?" selected":"")+'>'+esc(b.nome)+'</option>';}).join("");}
+function catOptions(sel){return CATS.map(function(c){return '<option value="'+c.slug+'"'+(c.slug===sel?" selected":"")+'>'+esc(c.nome)+'</option>';}).join("");}
+function uploadErr(e){return "Falha no envio: "+(e&&e.message||"erro");}
+
+/* produtos */
+function telaProdutos(body){
+  var m=S.m,q=norm(m.q).trim();
+  var arr=S.products.filter(function(p){
+    if(m.marca&&p.marca!==m.marca)return false;
+    if(m.fil==="semimg"&&p.imagem)return false;
+    if(m.fil==="ocultos"&&p.visivel!==false)return false;
+    if(m.fil==="selo"&&!p.selo)return false;
+    if(q&&norm(p.nome+" "+p.nomeCadastro+" "+p.cod+" "+p.ean+" "+p.dun).indexOf(q)<0)return false;
+    return true;
+  }).sort(function(a,b){return a.cod-b.cod;});
+  var per=40,pages=Math.max(1,Math.ceil(arr.length/per));if(m.page>=pages)m.page=pages-1;
+  var h='<div class="panel"><div class="tools"><input id="mq" type="search" placeholder="Buscar nome, código ou EAN" value="'+esc(m.q)+'">'+
+    '<select id="mm"><option value="">Todas as marcas</option>'+brandOptions(m.marca)+'</select>'+
+    '<select id="mf"><option value="">Todos</option><option value="semimg"'+(m.fil==="semimg"?" selected":"")+'>Sem imagem</option><option value="ocultos"'+(m.fil==="ocultos"?" selected":"")+'>Ocultos</option><option value="selo"'+(m.fil==="selo"?" selected":"")+'>Com selo</option></select>'+
+    '<span class="mono">'+arr.length+' itens</span></div>';
+  h+='<div class="tbl-wrap"><table><thead><tr><th>Imagem</th><th>Cód.</th><th>Nome na landing page</th><th>Marca</th><th>Categoria</th><th>Selo</th><th>Visível</th><th></th></tr></thead><tbody>';
+  arr.slice(m.page*per,(m.page+1)*per).forEach(function(p){
+    h+='<tr data-cod="'+p.cod+'"><td><button class="thumb" data-up="'+p.cod+'" type="button" title="Trocar imagem">'+(p.imagem?'<img src="'+esc(imgUrl(p.imagem,120))+'" alt="" referrerpolicy="no-referrer">':'Enviar')+'</button></td>'+
+      '<td class="mono">'+p.cod+'<br><small>'+esc(p.ean)+'</small></td>'+
+      '<td><input type="text" data-f="nome" value="'+esc(p.nome)+'" aria-label="Nome"><small class="mono" style="padding-left:8px">'+esc(p.nomeCadastro)+'</small></td>'+
+      '<td><select data-f="marca">'+brandOptions(p.marca)+'</select></td>'+
+      '<td><select data-f="categoria">'+catOptions(p.categoria)+'</select></td>'+
+      '<td><select data-f="selo">'+SELOS.map(function(s){return '<option value="'+esc(s)+'"'+(s===(p.selo||"")?" selected":"")+'>'+(s||"—")+'</option>';}).join("")+'</select></td>'+
+      '<td><label class="sw"><input type="checkbox" data-f="visivel"'+(p.visivel!==false?" checked":"")+' aria-label="Visível"><i></i></label></td>'+
+      '<td><span class="saved"></span>'+(p.imagem?'<button class="btn btn-sm btn-ghost" data-rmimg="'+p.cod+'" type="button">Tirar imagem</button>':'')+'</td></tr>';
+  });
+  h+='</tbody></table></div><div class="pager"><button class="btn btn-sm" data-pg="-1" type="button"'+(m.page?"":" disabled")+'>Anterior</button> Página '+(m.page+1)+' de '+pages+' <button class="btn btn-sm" data-pg="1" type="button"'+(m.page<pages-1?"":" disabled")+'>Próxima</button></div></div>';
+  body.innerHTML=h;
+  var t;
+  body.querySelector("#mq").addEventListener("input",function(e){clearTimeout(t);t=setTimeout(function(){m.q=e.target.value;m.page=0;telaProdutos(body);var el=body.querySelector("#mq");el.focus();el.setSelectionRange(el.value.length,el.value.length);},250);});
+  body.querySelector("#mm").onchange=function(e){m.marca=e.target.value;m.page=0;telaProdutos(body);};
+  body.querySelector("#mf").onchange=function(e){m.fil=e.target.value;m.page=0;telaProdutos(body);};
+  body.onchange=function(e){
+    var f=e.target.dataset.f;if(!f)return;var cod=parseInt(e.target.closest("tr").dataset.cod,10),p=S.byCod[cod],patch={};
+    if(f==="visivel")patch.visivel=e.target.checked;
+    else if(f==="nome"){patch.nome=e.target.value.trim();patch.nomeEditado=true;}
+    else patch[f]=e.target.value;
+    Object.assign(p,patch);
+    salvar("produto",{cod:cod,patch:patch},e.target).catch(function(){});
+  };
+  body.onclick=function(e){
+    var up=e.target.closest("[data-up]"),pg=e.target.closest("[data-pg]"),rm=e.target.closest("[data-rmimg]");
+    if(pg){m.page+=parseInt(pg.dataset.pg,10);telaProdutos(body);return;}
+    if(rm){var c=parseInt(rm.dataset.rmimg,10);S.byCod[c].imagem="";salvar("produto",{cod:c,patch:{imagem:""}}).then(function(){telaProdutos(body);});return;}
+    if(up){pickFile(async function(file){
+      var p=S.byCod[parseInt(up.dataset.up,10)],cods=codsMesmoEan(p);
+      up.textContent="…";
+      try{await enviarImagem(file,"produto",cods,p.cod+"-"+CORE.slugify(p.nome));toast(cods.length>1?"Imagem aplicada em "+cods.length+" códigos com o mesmo EAN":"Imagem salva e publicada");telaProdutos(body);}
+      catch(err){up.textContent="Enviar";}
+    });}
+  };
+}
+
+/* marcas */
+function telaMarcas(body){
+  var cnt=countBy(S.products,"marca");
+  var h='<div class="panel"><p class="help">Ordem define a sequência na parede de marcas. A cor aparece na faixa lateral dos blocos e nas embalagens sem foto.</p><div class="tbl-wrap"><table><thead><tr><th>Logo</th><th>Marca</th><th>Ordem</th><th>Cor</th><th>Categoria</th><th>Descrição</th><th>SKUs</th><th>Visível</th><th></th></tr></thead><tbody>';
+  S.brandList.forEach(function(b){
+    h+='<tr data-slug="'+esc(b.slug)+'"><td><button class="thumb wide" data-logo="'+esc(b.slug)+'" type="button" title="Trocar logo">'+(b.logo?'<img src="'+esc(imgUrl(b.logo,240))+'" alt="" referrerpolicy="no-referrer">':'Enviar logo')+'</button></td>'+
+      '<td><input type="text" data-f="nome" value="'+esc(b.nome)+'"></td>'+
+      '<td><input type="text" data-f="ordem" value="'+esc(b.ordem||"")+'" style="min-width:56px;width:64px" inputmode="numeric"></td>'+
+      '<td><input type="color" data-f="cor" value="'+esc(b.cor||"#888888")+'" style="width:40px;height:32px;border:0;background:none;padding:0"></td>'+
+      '<td><select data-f="categoria">'+catOptions(b.categoria)+'</select></td>'+
+      '<td><textarea data-f="descricao">'+esc(b.descricao||"")+'</textarea></td>'+
+      '<td class="mono">'+(cnt[b.slug]||0)+'</td>'+
+      '<td><label class="sw"><input type="checkbox" data-f="visivel"'+(b.visivel!==false?" checked":"")+' aria-label="Visível"><i></i></label></td><td><span class="saved"></span></td></tr>';
+  });
+  h+='</tbody></table></div><div class="tools" style="margin-top:14px"><input id="nb" placeholder="Nova marca"><button class="btn btn-sm" id="nbAdd" type="button">Criar marca</button></div></div>';
+  body.innerHTML=h;
+  body.onchange=function(e){
+    var f=e.target.dataset.f;if(!f)return;var slug=e.target.closest("tr").dataset.slug,v=e.target.value,patch={};
+    patch[f]=f==="visivel"?e.target.checked:f==="ordem"?(parseInt(v,10)||999):v;
+    Object.assign(S.brands[slug],patch);reindex();
+    salvar("marca",{slug:slug,patch:patch},e.target).catch(function(){});
+  };
+  body.onclick=function(e){
+    var lg=e.target.closest("[data-logo]");
+    if(lg){pickFile(async function(file){lg.textContent="…";try{await enviarImagem(file,"marca",[lg.dataset.logo],"marca-"+lg.dataset.logo);toast("Logo salvo e publicado");telaMarcas(body);}catch(err){lg.textContent="Enviar logo";}});return;}
+    if(e.target.id==="nbAdd"){
+      var n=body.querySelector("#nb").value.trim();if(!n)return;var slug=CORE.slugify(n);
+      if(S.brands[slug]){toast("Essa marca já existe");return;}
+      var nova={slug:slug,nome:n,cor:"#8A9099",descricao:"",logo:"",categoria:"refrigerantes",ordem:S.brandList.length+1,visivel:true};
+      salvar("marca",{slug:slug,patch:nova}).then(function(){S.brands[slug]=nova;reindex();telaMarcas(body);toast("Marca criada");});
+    }
+  };
+}
+
+/* importação em lote */
+function telaImagens(body){
+  body.innerHTML='<div class="panel"><p class="help">Solte aqui as imagens da pasta <b>saida/imagens</b> do chupa-cabra, ou qualquer arquivo nomeado pelo <b>código</b> (2874.png), <b>EAN</b> ou <b>DUN</b>. Logos usam <b>marca-slug</b> (marca-coca-cola.png). Cada imagem é reduzida para até 1200 px antes do envio e vai ao ar na landing page assim que termina.</p>'+
+    '<label class="drop" id="drop"><input type="file" id="fi" multiple accept="image/png,image/jpeg,image/webp,image/svg+xml" class="hidden"><b>Solte as imagens aqui</b><br>ou clique para escolher<br><small>PNG, JPG, WEBP ou SVG</small></label>'+
+    '<div class="tools" style="margin-top:12px"><label><input type="checkbox" id="ow"> Substituir imagens que já existem</label></div><div id="plan"></div></div>';
+  var drop=body.querySelector("#drop"),fi=body.querySelector("#fi"),plan=[];
+  function handle(files){plan=matchFiles([].slice.call(files));showPlan();}
+  fi.onchange=function(){handle(fi.files);};
+  ["dragenter","dragover"].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.add("over");});});
+  ["dragleave","drop"].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.remove("over");});});
+  drop.addEventListener("drop",function(e){handle(e.dataTransfer.files);});
+  function showPlan(){
+    var ow=body.querySelector("#ow").checked,ok=plan.filter(function(x){return x.alvo;});
+    var fresh=ok.filter(function(x){return ow||!x.tem;});
+    var h='<div class="tools" style="margin-top:8px"><span class="tag ok">'+ok.length+' reconhecidas</span><span class="tag no">'+(plan.length-ok.length)+' sem correspondência</span>'+
+      '<button class="btn btn-red btn-sm" id="go" type="button"'+(fresh.length?"":" disabled")+'>Enviar '+fresh.length+' imagens</button><span id="prog" class="mono"></span></div>';
+    h+='<div class="tbl-wrap"><table><thead><tr><th>Arquivo</th><th>Destino</th><th>Situação</th></tr></thead><tbody>'+plan.map(function(x){
+      return '<tr><td class="mono">'+esc(x.file.name)+'</td><td>'+(x.alvo?esc(x.label):"—")+'</td><td>'+
+        (!x.alvo?'<span class="tag no">Não encontrado</span>':x.tem?'<span class="tag warn">Já tem imagem</span>':'<span class="tag ok">Pronto</span>')+'</td></tr>';}).join("")+'</tbody></table></div>';
+    body.querySelector("#plan").innerHTML=h;
+    body.querySelector("#ow").onchange=showPlan;
+    var go=body.querySelector("#go");if(go)go.onclick=function(){run(fresh);};
+  }
+  async function run(items){
+    var prog=body.querySelector("#prog"),go=body.querySelector("#go");go.disabled=true;var done=0,fail=0;
+    S.busy++;
+    try{
+      for(var i=0;i<items.length;i++){
+        var x=items[i];prog.textContent="Enviando "+(i+1)+" de "+items.length+"…";
+        try{await enviarImagem(x.file,x.alvo,x.chaves,x.nome);done++;}
+        catch(e){if(e.code==="ocupado"){await new Promise(function(r){setTimeout(r,3000);});i--;continue;}fail++;}
+      }
+    }finally{S.busy--;}
+    prog.textContent=done+" enviadas"+(fail?", "+fail+" com erro":"");toast("Importação concluída");
+  }
+}
+function matchFiles(files){
+  var byEan={},byDun={};S.products.forEach(function(p){if(p.ean)(byEan[p.ean]=byEan[p.ean]||[]).push(p);if(p.dun)(byDun[p.dun]=byDun[p.dun]||[]).push(p);});
+  return files.filter(function(f){return /^image\//.test(f.type)||/\.(png|jpe?g|webp|svg|gif)$/i.test(f.name);}).map(function(f){
+    var stem=f.name.replace(/\.[^.]+$/,"").trim(),r={file:f,alvo:"",chaves:[],label:"",tem:false,nome:stem};
+    var mb=stem.match(/^marca[-_ ](.+)$/i);
+    if(mb){var s=CORE.slugify(mb[1]),b=S.brands[s];if(b){r.alvo="marca";r.chaves=[s];r.label="Logo "+b.nome;r.tem=!!b.logo;}return r;}
+    var key=stem.split(/[^0-9]/)[0],list=[];
+    if(key){
+      if(key.length<=6&&S.byCod[parseInt(key,10)])list=codsMesmoEan(S.byCod[parseInt(key,10)]).map(function(c){return S.byCod[c];});
+      else if(byEan[key])list=byEan[key];
+      else if(byDun[key])list=byDun[key];
+      else{var e=CORE.normEan(key).ean;if(byEan[e])list=byEan[e];}
+    }
+    if(list.length){r.alvo="produto";r.chaves=list.map(function(p){return p.cod;});r.label=list.map(function(p){return p.cod+" · "+p.nome;}).join(" / ");r.tem=list.every(function(p){return p.imagem;});}
+    return r;
+  });
+}
+
+/* atualização pela planilha do sistema */
+function loadXLSX(){return window.XLSX?Promise.resolve(window.XLSX):carregarScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js").then(function(){return window.XLSX;});}
+function telaCadastro(body){
+  body.innerHTML='<div class="panel"><p class="help">Envie a planilha <b>Cadastro_Produto.xlsx</b> exportada do sistema. O portal cria os SKUs novos (com selo “Novidade”), oculta os suprimidos e atualiza EAN, embalagem e tamanho. Nomes editados, imagens e selos são preservados.</p>'+
+    '<label class="btn"><input type="file" id="xf" accept=".xlsx,.xls,.csv" class="hidden">Escolher planilha</label><div id="diff" style="margin-top:14px"></div></div>';
+  body.querySelector("#xf").onchange=async function(e){
+    var f=e.target.files[0];if(!f)return;var out=body.querySelector("#diff");out.innerHTML='<p class="help">Lendo planilha…</p>';
+    try{
+      var X=await loadXLSX(),wb=X.read(await f.arrayBuffer()),rows=X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
+      if(!rows.length||!("Cod. Produto" in rows[0])){out.innerHTML='<p class="help">A planilha não tem a coluna “Cod. Produto”. Use o mesmo modelo do Cadastro_Produto.</p>';return;}
+      showDiff(out,diffCadastro(rows));
+    }catch(err){out.innerHTML='<p class="help">'+esc(err.message||err)+'</p>';}
+  };
+}
+function diffCadastro(rows){
+  var novos=[],suprimir=[],alterar=[],marcasNovas={};
+  rows.forEach(function(r){
+    var p=CORE.fromRow(r);if(!p.cod)return;var cur=S.byCod[p.cod];
+    if(!cur){if(!p.suprimido&&p.venda){novos.push(p);if(!S.brands[p.marca])marcasNovas[p.marca]=p.marcaCadastro;}return;}
+    if(p.suprimido&&cur.visivel!==false){suprimir.push(cur);return;}
+    var patch={};["nomeCadastro","ean","dun","tipo","tamanho","qtd","sabor"].forEach(function(k){if(String(p[k])!==String(cur[k]==null?"":cur[k]))patch[k]=p[k];});
+    if(patch.nomeCadastro&&!cur.nomeEditado)patch.nome=p.nome;
+    if(Object.keys(patch).length)alterar.push(Object.assign({cod:p.cod},patch));
+  });
+  return {novos:novos,suprimir:suprimir,alterar:alterar,marcasNovas:marcasNovas};
+}
+function titleCase(s){return String(s).toLowerCase().replace(/(^|\s)\S/g,function(c){return c.toUpperCase();});}
+function showDiff(out,d){
+  var nm=Object.keys(d.marcasNovas),tot=d.novos.length+d.suprimir.length+d.alterar.length+nm.length;
+  var h='<div class="stats"><div class="stat"><b>'+d.novos.length+'</b><span>SKUs novos</span></div><div class="stat"><b>'+d.suprimir.length+'</b><span>suprimidos a ocultar</span></div><div class="stat"><b>'+d.alterar.length+'</b><span>com dados alterados</span></div><div class="stat"><b>'+nm.length+'</b><span>marcas novas</span></div></div>';
+  h+='<div class="tools"><button class="btn btn-red" id="apply" type="button"'+(tot?"":" disabled")+'>Aplicar alterações</button><span id="ap" class="mono"></span></div>';
+  if(d.novos.length)h+='<h3>Novos</h3><div class="tbl-wrap"><table><tbody>'+d.novos.slice(0,150).map(function(p){return '<tr><td class="mono">'+p.cod+'</td><td>'+esc(p.nome)+'</td><td>'+esc(p.marcaCadastro)+'</td></tr>';}).join("")+'</tbody></table></div>';
+  if(d.suprimir.length)h+='<h3>Serão ocultados</h3><div class="tbl-wrap"><table><tbody>'+d.suprimir.map(function(p){return '<tr><td class="mono">'+p.cod+'</td><td>'+esc(p.nome)+'</td></tr>';}).join("")+'</tbody></table></div>';
+  if(!tot)h+='<p class="help">A landing page já está igual à planilha.</p>';
+  out.innerHTML=h;
+  var btn=out.querySelector("#apply");if(btn)btn.onclick=async function(){
+    btn.disabled=true;var ap=out.querySelector("#ap");
+    var marcas=nm.map(function(s,i){return {slug:s,nome:titleCase(d.marcasNovas[s]||s),cor:"#8A9099",descricao:"",logo:"",categoria:CORE.BRAND_CAT[s]||"refrigerantes",ordem:S.brandList.length+i+1,visivel:true};});
+    var prods=d.novos.map(function(p){return {cod:p.cod,nome:p.nome,nomeCadastro:p.nomeCadastro,nomeEditado:false,marca:p.marca,categoria:p.categoria,sabor:p.sabor,tipo:p.tipo,tamanho:p.tamanho,qtd:p.qtd,ean:p.ean,dun:p.dun,visivel:true,imagem:"",selo:"Novidade",suprimido:false};})
+      .concat(d.suprimir.map(function(p){return {cod:p.cod,visivel:false,suprimido:true};})).concat(d.alterar);
+    try{
+      if(marcas.length){ap.textContent="Gravando marcas…";await salvar("upsert",{marcas:marcas});}
+      for(var i=0;i<prods.length;i+=120){ap.textContent="Gravando "+Math.min(i+120,prods.length)+" de "+prods.length+"…";await salvar("upsert",{produtos:prods.slice(i,i+120)});}
+      ap.textContent="Concluído";toast("Cadastro atualizado na landing page");await carregar();
+    }catch(e){btn.disabled=false;ap.textContent="Parou: "+e.message;}
+  };
+}
+
+/* configurações */
+function telaSite(body){
+  var c=S.config||{};
+  body.innerHTML='<div class="panel"><div class="form">'+
+    '<label>Título<input id="ct" value="'+esc(c.titulo||"")+'"></label>'+
+    '<label>Subtítulo<input id="cs" value="'+esc(c.subtitulo||"")+'"></label>'+
+    '<label>Link do botão “Pedir no BandToGo”<input id="cl" value="'+esc(c.linkPedido||"")+'" placeholder="https://"></label>'+
+    '<div><button class="btn btn-red" id="csave" type="button">Salvar</button></div></div></div>';
+  body.querySelector("#csave").onclick=function(){
+    var patch={titulo:body.querySelector("#ct").value.trim(),subtitulo:body.querySelector("#cs").value.trim(),linkPedido:body.querySelector("#cl").value.trim()};
+    salvar("config",{patch:patch}).then(function(){Object.assign(S.config,patch);toast("Configurações salvas");}).catch(function(){});
+  };
+}
+
+boot();
+})();
+</script>
+</body>
+</html>

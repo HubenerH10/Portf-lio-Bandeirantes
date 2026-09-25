@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Portfólio Coca-Cola Bandeirantes</title>
+<meta name="theme-color" content="#E4002B">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="mark" href="#/">
+      <span class="mark-disc" aria-hidden="true">B</span>
+      <span><span class="mark-t" id="siteTitle">Portfólio Bandeirantes</span><br><span class="mark-s" id="siteSub">Goiás e Tocantins</span></span>
+    </a>
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Buscar por produto, marca, código ou EAN" autocomplete="off" aria-label="Buscar produtos">
+    </label>
+    <div class="top-act">
+      <button id="selBtn" class="btn btn-red btn-sm" type="button"><span class="lbl">Meu portfólio</span> <span class="count" id="selCount">0</span></button>
+    </div>
+  </div>
+</header>
+<main id="app"><div class="status">Carregando portfólio…</div></main>
+<div id="layer"></div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+(function(){
+"use strict";
+var POLL_MS = 20000;
+var S = { brands:{}, brandList:[], products:[], byCod:{}, config:{}, cats:[], versao:"", sel:[], limit:60, f:{cat:"",marca:"",tipo:"",tam:"",q:""} };
+var CATN = {};
+var $app = document.getElementById("app"), $layer = document.getElementById("layer");
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function norm(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();}
+function toast(msg){var t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(function(){t.remove();},2600);}
+function store(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k)||"null");localStorage.setItem(k,JSON.stringify(v));}catch(e){return null;}}
+function brandOf(p){return S.brands[p.marca]||{nome:p.marca,cor:"#8A9099",slug:p.marca};}
+function qtdTxt(q){return q>1?q+" unidades":"1 unidade";}
+function copy(txt){if(navigator.clipboard)navigator.clipboard.writeText(txt).then(function(){toast("Copiado");},function(){toast("Não foi possível copiar");});}
+
+var CATS_PADRAO=[["refrigerantes","Refrigerantes"],["sucos","Néctares e sucos"],["sementes","À base de sementes"],["chas","Chás"],["aguas","Águas"],["energeticos","Energéticos"],["performance","Performance"],["cervejas","Cervejas"],["drinks","Drinks prontos"],["destilados","Destilados"],["bomboniere","Bomboniere"]].map(function(c){return {slug:c[0],nome:c[1]};});
+
+var SHAPES={
+  lata:'<svg viewBox="0 0 40 70"><rect x="6" y="6" width="28" height="58" rx="5" fill="currentColor" opacity=".9"/><rect x="9" y="2" width="22" height="6" rx="2" fill="currentColor" opacity=".45"/><rect x="6" y="22" width="28" height="18" fill="#fff" opacity=".25"/></svg>',
+  pet:'<svg viewBox="0 0 40 90"><rect x="15" y="2" width="10" height="8" rx="1.5" fill="currentColor" opacity=".55"/><path d="M15 10h10c0 8 9 12 9 22v50a6 6 0 0 1-6 6H12a6 6 0 0 1-6-6V32c0-10 9-14 9-22z" fill="currentColor" opacity=".9"/><rect x="6" y="46" width="28" height="18" fill="#fff" opacity=".25"/></svg>',
+  vidro:'<svg viewBox="0 0 40 90"><rect x="16" y="2" width="8" height="6" rx="1" fill="currentColor" opacity=".55"/><path d="M16 8h8v16c0 6 10 10 10 20v38a6 6 0 0 1-6 6H12a6 6 0 0 1-6-6V44c0-10 10-14 10-20z" fill="currentColor" opacity=".9"/><rect x="6" y="52" width="28" height="16" fill="#fff" opacity=".25"/></svg>',
+  caixa:'<svg viewBox="0 0 50 70"><path d="M8 14 25 6l17 8v50H8z" fill="currentColor" opacity=".9"/><path d="M8 14 25 6l17 8-17 6z" fill="#fff" opacity=".25"/><rect x="8" y="34" width="34" height="14" fill="#fff" opacity=".25"/></svg>',
+  pacote:'<svg viewBox="0 0 60 50"><rect x="4" y="10" width="52" height="30" rx="6" fill="currentColor" opacity=".9"/><rect x="4" y="20" width="52" height="10" fill="#fff" opacity=".25"/></svg>'
+};
+function shapeFor(p){
+  var t=norm(p.tipo+" "+p.nomeCadastro);
+  if(/lata|\blt\b/.test(t))return SHAPES.lata;
+  if(/tetra|\btp\b|caixa|garrafa|monopeca/.test(t))return SHAPES.caixa;
+  if(/stick|slab|pacote|monoporcao/.test(t))return SHAPES.pacote;
+  if(/vidro|long|\bks\b|\bln\b|\bow\b|\bvr\b|barril/.test(t))return SHAPES.vidro;
+  return SHAPES.pet;
+}
+function imgHTML(p,w){
+  var b=brandOf(p);
+  if(p.imagem)return '<img src="'+esc(imgUrl(p.imagem,w))+'" alt="'+esc(p.nome)+'" loading="lazy" referrerpolicy="no-referrer">';
+  return '<div class="ph" style="--pc:'+esc(b.cor)+'" aria-hidden="true">'+shapeFor(p)+'<span>'+esc(p.tamanho||b.nome)+'</span></div>';
+}
+function brandMark(b){
+  if(b.logo)return '<img src="'+esc(imgUrl(b.logo,400))+'" alt="'+esc(b.nome)+'" referrerpolicy="no-referrer">';
+  return '<span class="wm" style="color:'+esc(b.cor)+'">'+esc(b.nome)+'</span>';
+}
+
+/* ---------- dados ---------- */
+function aplicar(cat){
+  S.versao=cat.versao||"";
+  S.config=cat.config||{};
+  S.cats=cat.categorias&&cat.categorias.length?cat.categorias:CATS_PADRAO;
+  CATN={};S.cats.forEach(function(c){CATN[c.slug]=c.nome;});
+  S.brands={};(cat.marcas||[]).forEach(function(m){S.brands[m.slug]=m;});
+  S.brandList=(cat.marcas||[]).slice().sort(function(a,b){return (a.ordem||999)-(b.ordem||999)||String(a.nome).localeCompare(b.nome);});
+  S.products=cat.produtos||[];
+  S.byCod={};S.products.forEach(function(p){S.byCod[p.cod]=p;});
+  document.getElementById("siteTitle").textContent=S.config.titulo||"Portfólio Bandeirantes";
+  document.getElementById("siteSub").textContent=S.config.subtitulo||"";
+  document.title=S.config.titulo||"Portfólio";
+}
+async function carregar(){
+  var cat=await API.catalogo();
+  aplicar(cat);store("bandPortCache",cat);
+  render();
+}
+async function verificar(){
+  if(document.hidden)return;
+  try{var v=await API.versao();if(v&&v!==S.versao)await carregar();}catch(e){}
+}
+async function boot(){
+  S.sel=store("bandPortSel")||[];updateSelCount();
+  if(!API.configurado()){$app.innerHTML='<div class="status">Falta configurar a URL do Apps Script em js/config.js.</div>';return;}
+  var cache=store("bandPortCache");
+  if(cache&&cache.produtos){aplicar(cache);render();}
+  try{await carregar();}
+  catch(e){if(!cache)$app.innerHTML='<div class="status">Não foi possível carregar o portfólio agora. Tente recarregar a página.</div>';}
+  setInterval(verificar,POLL_MS);
+  document.addEventListener("visibilitychange",verificar);
+}
+
+/* ---------- rotas ---------- */
+function route(){var parts=location.hash.replace(/^#\/?/,"").split("/");return {name:parts[0]||"home",arg:decodeURIComponent(parts[1]||"")};}
+window.addEventListener("hashchange",function(){closeLayer(true);S.limit=60;render();window.scrollTo(0,0);});
+
+function render(){
+  if(!S.products.length&&!S.brandList.length){$app.innerHTML='<div class="status">O portfólio ainda não tem produtos cadastrados.</div>';return;}
+  var r=route();
+  if(r.name==="produto"){renderCatalog({});var m=$layer.querySelector(".modal");if(!m||m.dataset.cod!==r.arg)openProduct(parseInt(r.arg,10));return;}
+  if(r.name==="marca"){renderCatalog({marca:r.arg});return;}
+  if(r.name==="categoria"){renderCatalog({cat:r.arg});return;}
+  renderCatalog({});
+}
+function visibleProducts(){return S.products.filter(function(p){var b=S.brands[p.marca];return p.visivel!==false&&(!b||b.visivel!==false);});}
+function filtered(base){
+  var f=S.f,qs=norm(f.q).trim().split(/\s+/).filter(Boolean);
+  return base.filter(function(p){
+    if(f.cat&&p.categoria!==f.cat)return false;
+    if(f.marca&&p.marca!==f.marca)return false;
+    if(f.tipo&&p.tipo!==f.tipo)return false;
+    if(f.tam&&p.tamanho!==f.tam)return false;
+    if(qs.length){var hay=norm(p.nome+" "+p.nomeCadastro+" "+brandOf(p).nome+" "+p.cod+" "+p.ean+" "+p.dun+" "+p.sabor);for(var i=0;i<qs.length;i++)if(hay.indexOf(qs[i])<0)return false;}
+    return true;
+  });
+}
+function sortProducts(arr){
+  return arr.slice().sort(function(a,b){
+    var ba=S.brands[a.marca],bb=S.brands[b.marca];
+    return ((ba&&ba.ordem)||999)-((bb&&bb.ordem)||999)||(b.selo?1:0)-(a.selo?1:0)||(a.imagem?0:1)-(b.imagem?0:1)||String(a.nome).localeCompare(b.nome,"pt");
+  });
+}
+function countBy(arr,key){var m={};arr.forEach(function(p){var k=p[key];if(k)m[k]=(m[k]||0)+1;});return m;}
+function volNum(t){var m=String(t).match(/([\d,]+)\s*(ml|l|g)/i);if(!m)return 1e9;var v=parseFloat(m[1].replace(",","."));return /^l$/i.test(m[2])?v*1000:v;}
+
+function renderCatalog(fix){
+  S.f.cat=fix.cat||"";S.f.marca=fix.marca||"";
+  var base=visibleProducts(),list=sortProducts(filtered(base));
+  var scope=base.filter(function(p){return(!S.f.cat||p.categoria===S.f.cat)&&(!S.f.marca||p.marca===S.f.marca);});
+  var b=S.f.marca?S.brands[S.f.marca]:null,h="";
+  h+='<nav class="crumbs" aria-label="Você está em"><a href="#/">Início</a>';
+  if(b)h+='<span>›</span><a href="#/categoria/'+esc(b.categoria)+'">'+esc(CATN[b.categoria]||"")+'</a><span>›</span>'+esc(b.nome);
+  else if(S.f.cat)h+='<span>›</span>'+esc(CATN[S.f.cat]||S.f.cat);
+  h+='</nav>';
+  if(b){
+    h+='<section class="bhead" style="--bc:'+esc(b.cor)+'"><div class="logo">'+brandMark(b)+'</div><div><h1>'+esc(b.nome)+'</h1><p>'+esc(b.descricao||"")+'</p></div></section>';
+  }else{
+    var cnt=countBy(base,"marca");
+    var brands=S.brandList.filter(function(x){return x.visivel!==false&&cnt[x.slug]&&(!S.f.cat||base.some(function(p){return p.marca===x.slug&&p.categoria===S.f.cat;}));});
+    h+='<div class="wall-h"><h1>'+(S.f.cat?esc(CATN[S.f.cat]):"Nossas marcas")+'</h1></div>';
+    h+='<div class="wall'+(S.f.cat||S.f.q?" compact":"")+'">'+brands.map(function(x){
+      return '<a class="tile" style="--bc:'+esc(x.cor)+'" href="#/marca/'+esc(x.slug)+'" title="'+esc(x.nome)+'">'+brandMark(x)+'<span class="n">'+cnt[x.slug]+'</span></a>';}).join("")+'</div>';
+  }
+  var cc=countBy(base.filter(function(p){return !S.f.marca||p.marca===S.f.marca;}),"categoria"),tc=countBy(scope,"tipo"),zc=countBy(scope,"tamanho");
+  h+='<div class="cat"><aside class="side" aria-label="Filtros">';
+  if(!b)h+='<h3>Categorias</h3><div class="grp">'+S.cats.filter(function(c){return cc[c.slug];}).map(function(c){
+    return '<button class="opt'+(S.f.cat===c.slug?" on":"")+'" data-cat="'+c.slug+'" type="button">'+esc(c.nome)+' <small>'+cc[c.slug]+'</small></button>';}).join("")+'</div>';
+  h+='<h3>Embalagem</h3><div class="grp">'+Object.keys(tc).sort().map(function(t){
+    return '<button class="opt'+(S.f.tipo===t?" on":"")+'" data-tipo="'+esc(t)+'" type="button">'+esc(t)+' <small>'+tc[t]+'</small></button>';}).join("")+'</div>';
+  h+='<h3>Tamanho</h3><div class="grp">'+Object.keys(zc).sort(function(a,b){return volNum(a)-volNum(b);}).map(function(t){
+    return '<button class="opt'+(S.f.tam===t?" on":"")+'" data-tam="'+esc(t)+'" type="button">'+esc(t)+' <small>'+zc[t]+'</small></button>';}).join("")+'</div>';
+  if(S.f.tipo||S.f.tam)h+='<button class="btn btn-sm side-clear" data-clear="1" type="button">Limpar filtros</button>';
+  h+='</aside><section><div class="res-h"><div class="pills">';
+  if(S.f.q)h+='<button class="pill" data-unq="1" type="button">Busca: <b>'+esc(S.f.q)+'</b> ✕</button>';
+  if(S.f.tipo)h+='<button class="pill" data-tipo="'+esc(S.f.tipo)+'" type="button">'+esc(S.f.tipo)+' ✕</button>';
+  if(S.f.tam)h+='<button class="pill" data-tam="'+esc(S.f.tam)+'" type="button">'+esc(S.f.tam)+' ✕</button>';
+  h+='</div><span class="meta">'+list.length+' produto'+(list.length===1?"":"s")+'</span></div>';
+  if(!list.length)h+='<div class="empty">Nenhum produto com esses filtros. <button class="btn btn-sm" data-clear="1" data-unq="1" type="button">Ver todos</button></div>';
+  else{
+    h+='<div class="grid">'+list.slice(0,S.limit).map(cardHTML).join("")+'</div>';
+    if(list.length>S.limit)h+='<div class="more"><button class="btn" data-more="1" type="button">Carregar mais produtos</button></div>';
+  }
+  h+='</section></div>';
+  var y=window.scrollY;$app.innerHTML=h;window.scrollTo(0,y);
+}
+function cardHTML(p){
+  var b=brandOf(p),on=S.sel.indexOf(p.cod)>=0;
+  return '<article class="card"><button class="card-img" data-open="'+p.cod+'" type="button" aria-label="Ver '+esc(p.nome)+'">'+imgHTML(p,400)+(p.selo?'<span class="selo">'+esc(p.selo)+'</span>':'')+'</button>'+
+    '<div class="card-b"><a class="bchip" href="#/marca/'+esc(p.marca)+'">'+esc(b.nome)+'</a>'+
+    '<button class="card-n" data-open="'+p.cod+'" type="button">'+esc(p.nome)+'</button>'+
+    '<div class="card-m"><span>Cód. '+p.cod+'</span>'+(p.tamanho?'<span>'+esc(p.tamanho)+'</span>':'')+'<span>'+qtdTxt(p.qtd)+'</span></div>'+
+    '<div class="card-f"><button class="add'+(on?" on":"")+'" data-add="'+p.cod+'" type="button">'+(on?"No portfólio":"Adicionar ao portfólio")+'</button></div></div></article>';
+}
+
+function openProduct(cod){
+  var p=S.byCod[cod];if(!p){toast("Produto não encontrado");return;}
+  var b=brandOf(p),on=S.sel.indexOf(p.cod)>=0,link=S.config.linkPedido||"";
+  $layer.innerHTML='<div class="scrim" data-close="1"><div class="modal" data-cod="'+p.cod+'" role="dialog" aria-modal="true" aria-label="'+esc(p.nome)+'">'+
+    '<button class="m-x" data-close="1" type="button" aria-label="Fechar">✕</button>'+
+    '<div class="m-img">'+imgHTML(p,900)+'</div><div class="m-b">'+
+    '<a class="bchip" href="#/marca/'+esc(p.marca)+'">'+esc(b.nome)+'</a><h2>'+esc(p.nome)+'</h2>'+
+    '<dl class="kv"><dt>Código</dt><dd class="cod">'+p.cod+'</dd>'+
+    (p.tamanho?'<dt>Tamanho</dt><dd>'+esc(p.tamanho)+'</dd>':'')+
+    '<dt>Quantidade</dt><dd>'+qtdTxt(p.qtd)+'</dd>'+
+    (p.tipo?'<dt>Embalagem</dt><dd>'+esc(p.tipo)+'</dd>':'')+
+    '<dt>Categoria</dt><dd>'+esc(CATN[p.categoria]||"")+'</dd>'+
+    (p.ean?'<dt>EAN</dt><dd class="mono">'+esc(p.ean)+'</dd>':'')+
+    (p.dun?'<dt>DUN</dt><dd class="mono">'+esc(p.dun)+'</dd>':'')+'</dl>'+
+    '<div class="m-act"><button class="btn btn-red" data-add="'+p.cod+'" type="button">'+(on?"Remover do portfólio":"Adicionar ao portfólio")+'</button>'+
+    '<button class="btn" data-copy="'+p.cod+'" type="button">Copiar dados</button>'+
+    (link?'<a class="btn" href="'+esc(link)+'" target="_blank" rel="noopener">Pedir no BandToGo</a>':'')+
+    '</div></div></div></div>';
+  document.addEventListener("keydown",escClose);
+  var x=$layer.querySelector(".m-x");if(x)x.focus();
+}
+function escClose(e){if(e.key==="Escape")closeLayer();}
+function closeLayer(silent){
+  if(!$layer.innerHTML)return;
+  $layer.innerHTML="";document.removeEventListener("keydown",escClose);
+  if(!silent&&route().name==="produto")history.back();
+}
+
+/* ---------- seleção ---------- */
+function toggleSel(cod){
+  var i=S.sel.indexOf(cod);if(i>=0)S.sel.splice(i,1);else S.sel.push(cod);
+  store("bandPortSel",S.sel);updateSelCount();
+  document.querySelectorAll('[data-add="'+cod+'"]').forEach(function(el){
+    var on=S.sel.indexOf(cod)>=0;
+    if(el.classList.contains("add")){el.classList.toggle("on",on);el.textContent=on?"No portfólio":"Adicionar ao portfólio";}
+    else el.textContent=on?"Remover do portfólio":"Adicionar ao portfólio";
+  });
+  if(document.querySelector(".drawer"))openSel();
+}
+function updateSelCount(){document.getElementById("selCount").textContent=S.sel.length;}
+function openSel(){
+  var items=S.sel.map(function(c){return S.byCod[c];}).filter(Boolean);
+  $layer.innerHTML='<div class="scrim" data-close="1"></div><aside class="drawer" role="dialog" aria-label="Meu portfólio">'+
+    '<div class="dr-h"><h2>Meu portfólio</h2><button class="btn btn-ghost btn-sm" data-close="1" type="button">Fechar</button></div><div class="dr-b">'+
+    (items.length?items.map(function(p){return '<div class="li"><div class="th">'+imgHTML(p,120)+'</div><div><div>'+esc(p.nome)+'</div><small>Cód. '+p.cod+(p.ean?' · EAN '+esc(p.ean):'')+'</small></div><button class="btn btn-sm btn-ghost" data-add="'+p.cod+'" type="button">Remover</button></div>';}).join("")
+      :'<p class="help" style="margin-top:14px">Toque em “Adicionar ao portfólio” nos produtos para montar uma lista e exportar os códigos.</p>')+
+    '</div><div class="dr-f"><button class="btn btn-red" data-export="1" type="button"'+(items.length?"":" disabled")+'>Baixar planilha</button><button class="btn" data-copycods="1" type="button"'+(items.length?"":" disabled")+'>Copiar códigos</button>'+(items.length?'<button class="btn btn-ghost" data-clearsel="1" type="button">Limpar</button>':'')+'</div></aside>';
+  document.addEventListener("keydown",escClose);
+}
+function exportSel(){
+  var rows=[["Código","Produto","Marca","Categoria","Tamanho","Qtd","EAN","DUN"]];
+  S.sel.forEach(function(c){var p=S.byCod[c];if(p)rows.push([p.cod,p.nome,brandOf(p).nome,CATN[p.categoria]||"",p.tamanho,p.qtd,p.ean,p.dun]);});
+  var csv="\ufeff"+rows.map(function(r){return r.map(function(v){v=String(v==null?"":v);return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}).join(";");}).join("\n");
+  var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download="meu-portfolio.csv";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},500);
+}
+
+/* ---------- eventos ---------- */
+var qTimer;
+document.getElementById("q").addEventListener("input",function(e){
+  clearTimeout(qTimer);var v=e.target.value;
+  qTimer=setTimeout(function(){S.f.q=v;S.limit=60;if(route().name==="produto")location.hash="#/";else render();},180);
+});
+document.getElementById("selBtn").addEventListener("click",openSel);
+document.addEventListener("click",function(e){
+  var t=e.target.closest("[data-open],[data-add],[data-cat],[data-tipo],[data-tam],[data-clear],[data-unq],[data-more],[data-close],[data-copy],[data-export],[data-copycods],[data-clearsel]");
+  if(!t)return;var d=t.dataset;
+  if(d.close!==undefined){if(e.target===t||t.tagName==="BUTTON")closeLayer();return;}
+  if(d.open){location.hash="#/produto/"+d.open;return;}
+  if(d.add){toggleSel(parseInt(d.add,10));return;}
+  if(d.copy){var p=S.byCod[d.copy];copy(p.nome+"\nCódigo: "+p.cod+(p.ean?"\nEAN: "+p.ean:"")+(p.dun?"\nDUN: "+p.dun:""));return;}
+  if(d.export){exportSel();return;}
+  if(d.copycods){copy(S.sel.join("\n"));return;}
+  if(d.clearsel){S.sel=[];store("bandPortSel",S.sel);updateSelCount();openSel();render();return;}
+  if(d.cat!==undefined){location.hash=S.f.cat===d.cat?"#/":"#/categoria/"+d.cat;return;}
+  if(d.tipo!==undefined){S.f.tipo=S.f.tipo===d.tipo?"":d.tipo;S.limit=60;render();return;}
+  if(d.tam!==undefined){S.f.tam=S.f.tam===d.tam?"":d.tam;S.limit=60;render();return;}
+  if(d.clear!==undefined||d.unq!==undefined){if(d.clear!==undefined){S.f.tipo="";S.f.tam="";}if(d.unq!==undefined){S.f.q="";document.getElementById("q").value="";}render();return;}
+  if(d.more){S.limit+=60;render();}
+});
+boot();
+})();
+</script>
+</body>
+</html>
