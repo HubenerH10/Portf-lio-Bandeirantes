@@ -221,6 +221,46 @@ td input[type=text]:focus,td select:focus,td textarea:focus{border-color:var(--f
 .gh{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:none}
 .note{background:var(--bg);border-radius:var(--r-md);padding:12px 14px;font-size:14px;color:var(--ink-2)}
 .log{font:13px/1.5 ui-monospace,Consolas,monospace;background:var(--bg);border-radius:var(--r-md);padding:10px;max-height:220px;overflow:auto;white-space:pre-wrap}
+
+/* barra de marcas */
+.bbar{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 10px;margin:0 0 14px;scrollbar-width:thin}
+.bpill{flex:0 0 auto;display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:8px;background:var(--bc);color:#fff;font:700 16px/1 var(--f-display);letter-spacing:.4px;text-transform:uppercase;text-decoration:none;opacity:.92}
+.bpill:hover{opacity:1}
+.bpill.on{outline:3px solid var(--ink);outline-offset:2px;opacity:1}
+/* card horizontal */
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
+.pc{position:relative;display:grid;grid-template-columns:150px 1fr;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;min-height:200px}
+.pc.on{border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red)}
+.pc-img{border:0;background:var(--surface);padding:14px 10px;display:grid;place-items:center;border-right:1px solid var(--line);position:relative}
+.pc-img img{max-height:170px;object-fit:contain}
+.pc-img .ph svg{height:110px}
+.pc-img .ph span{font-size:13px}
+.pc-b{padding:14px 44px 14px 16px;display:flex;flex-direction:column;gap:3px;font-size:15px}
+.pc-n{border:0;background:none;padding:0;text-align:left;font-weight:700;font-size:16px;line-height:1.25;margin-bottom:4px}
+.pc-n:hover{text-decoration:underline}
+.pc-cod{color:var(--ink-3)}
+.pc-cod b{color:var(--red)}
+.pc-m{color:var(--ink-3)}
+.pc-m b{color:var(--ink);font-weight:500}
+.pc .bchip{margin-top:auto;font-size:12px;padding:4px 9px}
+.ck{position:absolute;right:12px;top:12px;width:26px;height:26px;border-radius:6px;border:2px solid var(--line-2);background:var(--surface);display:grid;place-items:center;padding:0}
+.ck.on{background:var(--red);border-color:var(--red)}
+.ck.on::after{content:"";width:12px;height:7px;border:3px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.selall{display:inline-flex;align-items:center;gap:10px;height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);font:600 15px/1 var(--f-display);letter-spacing:.3px;text-transform:uppercase}
+.selall .ck{position:static;width:20px;height:20px;border-radius:5px}
+.selall .ck.on::after{width:9px;height:5px;border-width:2px}
+.res-r{display:flex;align-items:center;gap:12px}
+/* botão flutuante */
+.fab{position:fixed;right:22px;bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:35;display:flex;align-items:center;gap:10px;height:54px;padding:0 20px 0 16px;border-radius:999px;border:0;background:var(--red);color:#fff;font:700 17px/1 var(--f-display);letter-spacing:.3px;box-shadow:0 6px 18px rgba(0,0,0,.22)}
+.fab svg{width:22px;height:22px}
+.fab b{background:#fff;color:var(--red);min-width:24px;height:24px;border-radius:12px;display:grid;place-items:center;font-size:14px;padding:0 6px}
+/* gaveta */
+.li .th .ph svg{height:40px}
+.li .th .ph span{display:none}
+.li .th{overflow:hidden}
+.dr-f .btn-red{flex:1 1 100%;justify-content:center;height:46px;font-size:16px}
+.dr-msg{font-size:14px;color:var(--ink-2);flex-basis:100%}
+@media (max-width:640px){.grid2{grid-template-columns:1fr}.pc{grid-template-columns:118px 1fr;min-height:170px}.pc-img img{max-height:130px}.fab{right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px))}}
 </style>
 </head>
 <body>
@@ -235,11 +275,12 @@ td input[type=text]:focus,td select:focus,td textarea:focus{border-color:var(--f
       <input id="q" type="search" placeholder="Buscar por produto, marca, código ou EAN" autocomplete="off" aria-label="Buscar produtos">
     </label>
     <div class="top-act">
-      <button id="selBtn" class="btn btn-red btn-sm" type="button"><span class="lbl">Meu portfólio</span> <span class="count" id="selCount">0</span></button>
+      <button id="selBtn" class="btn btn-red btn-sm" type="button"><span class="lbl">Selecionados</span> <span class="count" id="selCount">0</span></button>
     </div>
   </div>
 </header>
 <main id="app"><div class="status">Carregando portfólio…</div></main>
+<button id="fab" class="fab hidden" type="button" aria-label="Baixar imagens dos selecionados"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>Baixar imagens <b id="fabN">0</b></button>
 <div id="layer"></div>
 
 <script src="config.js"></script>
@@ -264,6 +305,7 @@ var API = (function () {
     configurado: configurado,
     catalogo: function () { return get("catalogo"); },
     versao: function () { return get("versao").then(function (j) { return j.versao; }); },
+    imagem: function (id) { return get("img&id=" + encodeURIComponent(id)); },
     post: post
   };
 })();
@@ -383,6 +425,11 @@ function sortProducts(arr){
   });
 }
 function countBy(arr,key){var m={};arr.forEach(function(p){var k=p[key];if(k)m[k]=(m[k]||0)+1;});return m;}
+function brandBar(){
+  var cnt=countBy(visibleProducts(),"marca");
+  return '<nav class="bbar" aria-label="Marcas">'+S.brandList.filter(function(x){return x.visivel!==false&&cnt[x.slug];}).map(function(x){
+    return '<a class="bpill'+(S.f.marca===x.slug?" on":"")+'" style="--bc:'+esc(x.cor)+'" href="#/marca/'+esc(x.slug)+'">'+esc(x.nome)+'</a>';}).join("")+'</nav>';
+}
 function volNum(t){var m=String(t).match(/([\d,]+)\s*(ml|l|g)/i);if(!m)return 1e9;var v=parseFloat(m[1].replace(",","."));return /^l$/i.test(m[2])?v*1000:v;}
 
 function renderCatalog(fix){
@@ -394,6 +441,7 @@ function renderCatalog(fix){
   if(b)h+='<span>›</span><a href="#/categoria/'+esc(b.categoria)+'">'+esc(CATN[b.categoria]||"")+'</a><span>›</span>'+esc(b.nome);
   else if(S.f.cat)h+='<span>›</span>'+esc(CATN[S.f.cat]||S.f.cat);
   h+='</nav>';
+  h+=brandBar();
   if(b){
     h+='<section class="bhead" style="--bc:'+esc(b.cor)+'"><div class="logo">'+brandMark(b)+'</div><div><h1>'+esc(b.nome)+'</h1><p>'+esc(b.descricao||"")+'</p></div></section>';
   }else{
@@ -416,10 +464,12 @@ function renderCatalog(fix){
   if(S.f.q)h+='<button class="pill" data-unq="1" type="button">Busca: <b>'+esc(S.f.q)+'</b> ✕</button>';
   if(S.f.tipo)h+='<button class="pill" data-tipo="'+esc(S.f.tipo)+'" type="button">'+esc(S.f.tipo)+' ✕</button>';
   if(S.f.tam)h+='<button class="pill" data-tam="'+esc(S.f.tam)+'" type="button">'+esc(S.f.tam)+' ✕</button>';
-  h+='</div><span class="meta">'+list.length+' produto'+(list.length===1?"":"s")+'</span></div>';
+  S.lastList=list;
+  var todos=list.length&&list.every(function(p){return S.sel.indexOf(p.cod)>=0;});
+  h+='</div><div class="res-r"><span class="meta">'+list.length+' produto'+(list.length===1?"":"s")+'</span>'+(list.length?'<button class="selall" data-selall="1" type="button">Selecionar todos <span class="ck'+(todos?" on":"")+'"></span></button>':'')+'</div></div>';
   if(!list.length)h+='<div class="empty">Nenhum produto com esses filtros. <button class="btn btn-sm" data-clear="1" data-unq="1" type="button">Ver todos</button></div>';
   else{
-    h+='<div class="grid">'+list.slice(0,S.limit).map(cardHTML).join("")+'</div>';
+    h+='<div class="grid2">'+list.slice(0,S.limit).map(cardHTML).join("")+'</div>';
     if(list.length>S.limit)h+='<div class="more"><button class="btn" data-more="1" type="button">Carregar mais produtos</button></div>';
   }
   h+='</section></div>';
@@ -427,11 +477,15 @@ function renderCatalog(fix){
 }
 function cardHTML(p){
   var b=brandOf(p),on=S.sel.indexOf(p.cod)>=0;
-  return '<article class="card"><button class="card-img" data-open="'+p.cod+'" type="button" aria-label="Ver '+esc(p.nome)+'">'+imgHTML(p,400)+(p.selo?'<span class="selo">'+esc(p.selo)+'</span>':'')+'</button>'+
-    '<div class="card-b"><a class="bchip" href="#/marca/'+esc(p.marca)+'">'+esc(b.nome)+'</a>'+
-    '<button class="card-n" data-open="'+p.cod+'" type="button">'+esc(p.nome)+'</button>'+
-    '<div class="card-m"><span>Cód. '+p.cod+'</span>'+(p.tamanho?'<span>'+esc(p.tamanho)+'</span>':'')+'<span>'+qtdTxt(p.qtd)+'</span></div>'+
-    '<div class="card-f"><button class="add'+(on?" on":"")+'" data-add="'+p.cod+'" type="button">'+(on?"No portfólio":"Adicionar ao portfólio")+'</button></div></div></article>';
+  return '<article class="pc'+(on?" on":"")+'" data-card="'+p.cod+'">'+
+    '<button class="pc-img" data-open="'+p.cod+'" type="button" aria-label="Ver '+esc(p.nome)+'">'+imgHTML(p,400)+(p.selo?'<span class="selo">'+esc(p.selo)+'</span>':'')+'</button>'+
+    '<div class="pc-b"><button class="pc-n" data-open="'+p.cod+'" type="button">'+esc(p.nome)+'</button>'+
+    '<div class="pc-cod">Cód.: <b>'+p.cod+'</b></div>'+
+    (p.tamanho?'<div class="pc-m">Tamanho: <b>'+esc(p.tamanho)+'</b></div>':'')+
+    '<div class="pc-m">Quantidade: <b>'+qtdTxt(p.qtd)+'</b></div>'+
+    (p.ean?'<div class="pc-m">EAN: <b>'+esc(p.ean)+'</b></div>':'')+
+    '<a class="bchip" style="background:'+esc(b.cor)+'" href="#/marca/'+esc(p.marca)+'">'+esc(b.nome)+'</a></div>'+
+    '<button class="ck'+(on?" on":"")+'" data-add="'+p.cod+'" type="button" aria-pressed="'+on+'" aria-label="Selecionar '+esc(p.nome)+'"></button></article>';
 }
 
 function openProduct(cod){
@@ -448,7 +502,8 @@ function openProduct(cod){
     '<dt>Categoria</dt><dd>'+esc(CATN[p.categoria]||"")+'</dd>'+
     (p.ean?'<dt>EAN</dt><dd class="mono">'+esc(p.ean)+'</dd>':'')+
     (p.dun?'<dt>DUN</dt><dd class="mono">'+esc(p.dun)+'</dd>':'')+'</dl>'+
-    '<div class="m-act"><button class="btn btn-red" data-add="'+p.cod+'" type="button">'+(on?"Remover do portfólio":"Adicionar ao portfólio")+'</button>'+
+    '<div class="m-act">'+(p.imagem?'<button class="btn btn-red" data-dl="'+p.cod+'" type="button">Baixar imagem</button>':'')+
+    '<button class="btn" data-add="'+p.cod+'" data-modal="1" type="button">'+(on?"Remover da seleção":"Selecionar")+'</button>'+
     '<button class="btn" data-copy="'+p.cod+'" type="button">Copiar dados</button>'+
     (link?'<a class="btn" href="'+esc(link)+'" target="_blank" rel="noopener">Pedir no BandToGo</a>':'')+
     '</div></div></div></div>';
@@ -463,25 +518,82 @@ function closeLayer(silent){
 }
 
 /* ---------- seleção ---------- */
-function toggleSel(cod){
-  var i=S.sel.indexOf(cod);if(i>=0)S.sel.splice(i,1);else S.sel.push(cod);
+function setSel(cods,on){
+  cods.forEach(function(cod){var i=S.sel.indexOf(cod);if(on&&i<0)S.sel.push(cod);if(!on&&i>=0)S.sel.splice(i,1);});
   store("bandPortSel",S.sel);updateSelCount();
-  document.querySelectorAll('[data-add="'+cod+'"]').forEach(function(el){
-    var on=S.sel.indexOf(cod)>=0;
-    if(el.classList.contains("add")){el.classList.toggle("on",on);el.textContent=on?"No portfólio":"Adicionar ao portfólio";}
-    else el.textContent=on?"Remover do portfólio":"Adicionar ao portfólio";
+  cods.forEach(function(cod){
+    var sel=S.sel.indexOf(cod)>=0;
+    document.querySelectorAll('[data-add="'+cod+'"]').forEach(function(el){
+      if(el.classList.contains("ck")){el.classList.toggle("on",sel);el.setAttribute("aria-pressed",sel);}
+      else if(el.dataset.modal)el.textContent=sel?"Remover da seleção":"Selecionar";
+    });
+    var c=document.querySelector('[data-card="'+cod+'"]');if(c)c.classList.toggle("on",sel);
   });
+  var sa=document.querySelector(".selall .ck");
+  if(sa&&S.lastList)sa.classList.toggle("on",S.lastList.length>0&&S.lastList.every(function(p){return S.sel.indexOf(p.cod)>=0;}));
   if(document.querySelector(".drawer"))openSel();
 }
-function updateSelCount(){document.getElementById("selCount").textContent=S.sel.length;}
+function toggleSel(cod){setSel([cod],S.sel.indexOf(cod)<0);}
+function updateSelCount(){
+  document.getElementById("selCount").textContent=S.sel.length;
+  var f=document.getElementById("fab");f.classList.toggle("hidden",!S.sel.length);document.getElementById("fabN").textContent=S.sel.length;
+}
 function openSel(){
   var items=S.sel.map(function(c){return S.byCod[c];}).filter(Boolean);
-  $layer.innerHTML='<div class="scrim" data-close="1"></div><aside class="drawer" role="dialog" aria-label="Meu portfólio">'+
-    '<div class="dr-h"><h2>Meu portfólio</h2><button class="btn btn-ghost btn-sm" data-close="1" type="button">Fechar</button></div><div class="dr-b">'+
-    (items.length?items.map(function(p){return '<div class="li"><div class="th">'+imgHTML(p,120)+'</div><div><div>'+esc(p.nome)+'</div><small>Cód. '+p.cod+(p.ean?' · EAN '+esc(p.ean):'')+'</small></div><button class="btn btn-sm btn-ghost" data-add="'+p.cod+'" type="button">Remover</button></div>';}).join("")
-      :'<p class="help" style="margin-top:14px">Toque em “Adicionar ao portfólio” nos produtos para montar uma lista e exportar os códigos.</p>')+
-    '</div><div class="dr-f"><button class="btn btn-red" data-export="1" type="button"'+(items.length?"":" disabled")+'>Baixar planilha</button><button class="btn" data-copycods="1" type="button"'+(items.length?"":" disabled")+'>Copiar códigos</button>'+(items.length?'<button class="btn btn-ghost" data-clearsel="1" type="button">Limpar</button>':'')+'</div></aside>';
+  var com=items.filter(function(p){return p.imagem;}).length,sem=items.length-com;
+  $layer.innerHTML='<div class="scrim" data-close="1"></div><aside class="drawer" role="dialog" aria-label="Selecionados">'+
+    '<div class="dr-h"><h2>Selecionados ('+items.length+')</h2><button class="btn btn-ghost btn-sm" data-close="1" type="button">Fechar</button></div><div class="dr-b">'+
+    (items.length?items.map(function(p){return '<div class="li"><div class="th">'+imgHTML(p,120)+'</div><div><div>'+esc(p.nome)+'</div><small>Cód. '+p.cod+(p.ean?' · EAN '+esc(p.ean):'')+(p.imagem?'':' · sem imagem')+'</small></div><button class="btn btn-sm btn-ghost" data-add="'+p.cod+'" type="button">Remover</button></div>';}).join("")
+      :'<p class="help" style="margin-top:14px">Marque os produtos na caixa do canto de cada card, ou use “Selecionar todos”, para baixar as imagens de uma vez.</p>')+
+    '</div><div class="dr-f">'+
+    (items.length?'<button class="btn btn-red" data-zip="1" type="button"'+(com?"":" disabled")+'>Baixar '+com+' image'+(com===1?"m":"ns")+' (.zip)</button>'+(sem?'<span class="dr-msg">'+sem+' '+(sem===1?"item":"itens")+' ainda sem imagem fica'+(sem===1?"":"m")+' de fora.</span>':'')+
+      '<span class="dr-msg hidden" id="zipMsg"></span><button class="btn btn-sm" data-export="1" type="button">Baixar planilha</button><button class="btn btn-sm" data-copycods="1" type="button">Copiar códigos</button><button class="btn btn-sm btn-ghost" data-clearsel="1" type="button">Limpar</button>':'')+
+    '</div></aside>';
   document.addEventListener("keydown",escClose);
+}
+function salvarBlob(blob,nome){
+  var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1500);
+}
+function extDe(mime){return /png/.test(mime)?"png":/webp/.test(mime)?"webp":/svg/.test(mime)?"svg":/gif/.test(mime)?"gif":"jpg";}
+function nomeArquivo(p,ext){return (p.cod+" - "+String(p.nome).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\w\s().,-]+/g,"").replace(/\s+/g," ").trim()).slice(0,120)+"."+ext;}
+function carregarScript(src){return new Promise(function(res,rej){var s=document.createElement("script");s.src=src;s.onload=res;s.onerror=function(){rej(new Error("Não carregou "+src));};document.head.appendChild(s);});}
+// busca a imagem original: primeiro direto do Drive; se o navegador bloquear, pelo Apps Script
+async function pegarImagem(v){
+  if(/^(https?:|img\/|\.\/)/.test(v)){var r0=await fetch(v);var b0=await r0.blob();return {blob:b0,ext:extDe(b0.type)};}
+  try{
+    var r=await fetch("https://lh3.googleusercontent.com/d/"+v+"=s0",{mode:"cors",referrerPolicy:"no-referrer"});
+    if(!r.ok)throw new Error(r.status);var b=await r.blob();if(!/^image\//.test(b.type))throw new Error("tipo");
+    return {blob:b,ext:extDe(b.type)};
+  }catch(e){
+    var j=await API.imagem(v);if(!j||j.erro||!j.base64)throw new Error((j&&j.erro)||"sem imagem");
+    var bin=atob(j.base64),u8=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+    return {blob:new Blob([u8],{type:j.mime}),ext:extDe(j.mime)};
+  }
+}
+async function baixarZip(btn){
+  var items=S.sel.map(function(c){return S.byCod[c];}).filter(function(p){return p&&p.imagem;});
+  if(!items.length){toast("Nenhum item selecionado tem imagem ainda");return;}
+  var msg=document.getElementById("zipMsg");msg.classList.remove("hidden");btn.disabled=true;
+  try{
+    if(!window.JSZip){msg.textContent="Preparando…";await carregarScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");}
+    var zip=new JSZip(),cache={},ok=0,falha=0;
+    for(var i=0;i<items.length;i++){
+      var p=items[i];msg.textContent="Baixando imagem "+(i+1)+" de "+items.length+"…";
+      try{var r=cache[p.imagem]||(cache[p.imagem]=await pegarImagem(p.imagem));zip.file(nomeArquivo(p,r.ext),r.blob);ok++;}catch(e){falha++;}
+    }
+    if(!ok)throw new Error("nenhuma imagem pôde ser baixada");
+    msg.textContent="Compactando…";
+    var blob=await zip.generateAsync({type:"blob"});
+    salvarBlob(blob,"portfolio-bandeirantes-"+new Date().toISOString().slice(0,10)+".zip");
+    msg.textContent=ok+" imagens baixadas"+(falha?", "+falha+" com erro":"")+".";
+  }catch(e){msg.textContent="Não foi possível baixar: "+e.message;}
+  btn.disabled=false;
+}
+async function baixarUma(cod,btn){
+  var p=S.byCod[cod];if(!p||!p.imagem)return;
+  var t=btn.textContent;btn.textContent="Baixando…";btn.disabled=true;
+  try{var r=await pegarImagem(p.imagem);salvarBlob(r.blob,nomeArquivo(p,r.ext));}catch(e){toast("Não foi possível baixar a imagem");}
+  btn.textContent=t;btn.disabled=false;
 }
 function exportSel(){
   var rows=[["Código","Produto","Marca","Categoria","Tamanho","Qtd","EAN","DUN"]];
@@ -497,16 +609,20 @@ document.getElementById("q").addEventListener("input",function(e){
   qTimer=setTimeout(function(){S.f.q=v;S.limit=60;if(route().name==="produto")location.hash="#/";else render();},180);
 });
 document.getElementById("selBtn").addEventListener("click",openSel);
+document.getElementById("fab").addEventListener("click",openSel);
 document.addEventListener("click",function(e){
-  var t=e.target.closest("[data-open],[data-add],[data-cat],[data-tipo],[data-tam],[data-clear],[data-unq],[data-more],[data-close],[data-copy],[data-export],[data-copycods],[data-clearsel]");
+  var t=e.target.closest("[data-open],[data-add],[data-selall],[data-zip],[data-dl],[data-cat],[data-tipo],[data-tam],[data-clear],[data-unq],[data-more],[data-close],[data-copy],[data-export],[data-copycods],[data-clearsel]");
   if(!t)return;var d=t.dataset;
   if(d.close!==undefined){if(e.target===t||t.tagName==="BUTTON")closeLayer();return;}
   if(d.open){location.hash="#/produto/"+d.open;return;}
   if(d.add){toggleSel(parseInt(d.add,10));return;}
   if(d.copy){var p=S.byCod[d.copy];copy(p.nome+"\nCódigo: "+p.cod+(p.ean?"\nEAN: "+p.ean:"")+(p.dun?"\nDUN: "+p.dun:""));return;}
   if(d.export){exportSel();return;}
+  if(d.zip){baixarZip(t);return;}
+  if(d.dl){baixarUma(parseInt(d.dl,10),t);return;}
+  if(d.selall){var l=S.lastList||[],all=l.length&&l.every(function(p){return S.sel.indexOf(p.cod)>=0;});setSel(l.map(function(p){return p.cod;}),!all);return;}
   if(d.copycods){copy(S.sel.join("\n"));return;}
-  if(d.clearsel){S.sel=[];store("bandPortSel",S.sel);updateSelCount();openSel();render();return;}
+  if(d.clearsel){setSel(S.sel.slice(),false);return;}
   if(d.cat!==undefined){location.hash=S.f.cat===d.cat?"#/":"#/categoria/"+d.cat;return;}
   if(d.tipo!==undefined){S.f.tipo=S.f.tipo===d.tipo?"":d.tipo;S.limit=60;render();return;}
   if(d.tam!==undefined){S.f.tam=S.f.tam===d.tam?"":d.tam;S.limit=60;render();return;}
