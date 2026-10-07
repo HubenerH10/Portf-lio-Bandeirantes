@@ -261,6 +261,12 @@ td input[type=text]:focus,td select:focus,td textarea:focus{border-color:var(--f
 .dr-f .btn-red{flex:1 1 100%;justify-content:center;height:46px;font-size:16px}
 .dr-msg{font-size:14px;color:var(--ink-2);flex-basis:100%}
 @media (max-width:640px){.grid2{grid-template-columns:1fr}.pc{grid-template-columns:118px 1fr;min-height:170px}.pc-img img{max-height:130px}.fab{right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px))}}
+
+/* logo da marca sempre contido na caixa */
+.bhead .logo{height:120px;width:100%;max-width:200px;overflow:hidden;justify-self:center}
+.bhead .logo img{max-height:120px;max-width:100%;width:auto;height:auto;object-fit:contain}
+.tile img{max-height:52px;max-width:100%;width:auto;height:auto;object-fit:contain}
+@media (max-width:960px){.bhead .logo{height:90px}.bhead .logo img{max-height:90px}}
 </style>
 </head>
 <body>
